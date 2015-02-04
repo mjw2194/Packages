@@ -1,0 +1,74 @@
+setwd("C:/Users/mwilliams/Desktop/KeyDrivers/DataFiles")
+#Data<-read.csv(file = "./MarketShare.csv")
+Data<-read.csv(file = "./JEIF-TR-14 MarketShare-Edited.csv")
+
+  #random forest package VariableImportance
+
+MarketShareSample<-function(Data,ContactID,BrokerID,MarketShare,SampleSize,NumberOfSamples=100,plot="Yes",StartingBroker=1,EndingBroker=10,YAxis,Title,MaxShare=0.20){
+  
+  set.seed(44)
+  
+  xtabsObservedPoints<-xtabs(Data[,MarketShare]~Data[,ContactID]+Data[,BrokerID])
+  vecObservedSdSd<-apply(X = xtabsObservedPoints,MARGIN = 2,FUN = sd)
+  
+  ContactIDs<-unique(Data[,ContactID])
+  BrokerIDs<-unique(Data[,BrokerID])
+  MaxSampleSize<-length(ContactIDs)
+  
+  #print(length(ContactIDs))
+  #print(ContactIDs)
+  #print(length(BrokerIDs))
+  #print(BrokerIDs)
+  
+  matMaster<-matrix(rep(999),length(BrokerIDs),nrow=1,ncol=length(BrokerIDs))
+  colnames(matMaster)<-BrokerIDs
+  rownames(matMaster)<-"Brokers"  
+  
+  matSample<-matrix(data=c(0),nrow=1,ncol=1)
+  colnames(matSample)<-"Sample"
+  
+  matMaster<-cbind(matSample,matMaster)
+  #print(matMaster)
+  
+  for (i in 1:NumberOfSamples){
+    ContactSample<-sample(x=ContactIDs,size=SampleSize,replace=FALSE)
+    SampleRows<-Data[,ContactID] %in% ContactSample
+    vecShare<-tapply(Data[SampleRows,MarketShare],INDEX=Data[SampleRows,BrokerID],FUN=sum)
+    matShare<-matrix(data=vecShare,nrow=1,ncol=length(vecShare))
+    colnames(matShare)<-names(vecShare)
+    
+    matSample<-matrix(data=c(i,ContactSample),nrow=1,ncol=1)
+    colnames(matSample)<-c("Sample")
+    #print(matSample)
+    
+    matShare<-cbind(matSample,matShare)
+    rownames(matSample)<-paste("Sample",i,sep=" ")
+    #print(matShare)
+    
+    matMaster<-merge(matShare,matMaster,all=TRUE)
+    #matMaster<-matMaster[,BrokerID]
+    #print(matMaster)
+    }
+  #print(matMaster[1:5,])
+  matMaster<-matMaster[-1,]
+  #print(matMaster[1:5,])
+  
+  matMaster[is.na(matMaster)]<-0
+  vecSampleTotals<-rowSums(x=matMaster[,-1])
+  #print(vecSampleTotals)
+  
+  for (j in 1:nrow(matMaster)){
+    for (k in 2:ncol(matMaster)){
+      matMaster[j,k]<-matMaster[j,k]/vecSampleTotals[j]
+    }
+  }
+  
+  if (plot=="Yes"){
+      BrokerAvg<-names(sort(round(colMeans(matMaster[,2:length(BrokerIDs)+1]),MarketShare),decreasing=TRUE))
+      BrokerAvg<-BrokerAvg[StartingBroker:EndingBroker]
+      BoxPlotmatMaster<-matMaster[,2:length(BrokerIDs)+1]
+      #BrokerAvg<-names(sort(round(colMeans(BoxPlotmatMaster),MarketShare),decreasing=TRUE))
+      boxplot(x=BoxPlotmatMaster[,BrokerAvg],names=BrokerAvg,horizontal=FALSE,las=2,ylim=c(0,MaxShare),ylab=YAxis,main=paste(Title,"-","Brokers Ranked",StartingBroker,"through",EndingBroker,sep=" "))
+  }
+  return(list(Data=matMaster,AvgMarketShare=sort(round(colMeans(matMaster),MarketShare)),sd=round(apply(X=matMaster,MARGIN=2,FUN=sd),MarketShare),ObservedStandardDev=vecObservedSdSd,ObservedPoints=xtabsObservedPoints))
+}
